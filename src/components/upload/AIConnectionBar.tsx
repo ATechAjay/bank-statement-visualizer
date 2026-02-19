@@ -204,13 +204,27 @@ export function AIConnectionBar({ onStatusChange }: AIConnectionBarProps) {
 
       {/* Help when disconnected */}
       {status === 'failed' && (
-        <div className="text-xs text-muted-foreground space-y-1 pt-1">
-          <p>
-            Install{' '}
-            <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="underline text-primary">
-              Ollama
-            </a>
-            , run <code>ollama serve</code>, pull a model (<code>ollama pull llama3.2</code>), then click Connect.
+        <div className="text-xs text-muted-foreground space-y-2 pt-1">
+          <p className="font-medium text-foreground">Quick Setup:</p>
+          <ol className="list-decimal list-inside space-y-1">
+            <li>
+              Install{' '}
+              <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="underline text-primary">
+                Ollama
+              </a>
+            </li>
+            <li>
+              Open Terminal and run:
+              <div className="mt-1 space-y-1">
+                <code className="block bg-muted px-2 py-1 rounded text-[11px]">ollama pull llama3.2</code>
+                <code className="block bg-muted px-2 py-1 rounded text-[11px]">OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code>
+              </div>
+            </li>
+            <li>Click <strong>Connect</strong> above</li>
+          </ol>
+          <p className="text-[11px] opacity-70">
+            The <code>OLLAMA_ORIGINS</code> flag allows your browser to connect to the local AI. On Mac, run{' '}
+            <code>launchctl setenv OLLAMA_ORIGINS &quot;*&quot;</code> to make it permanent.
           </p>
         </div>
       )}
