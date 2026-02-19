@@ -25,6 +25,7 @@ import {
   User,
   ArrowDown,
 } from 'lucide-react';
+import { chatStream, listModels } from '@/lib/llm/ollamaBrowserClient';
 
 const messageVariants = {
   hidden: (isUser: boolean) => ({
@@ -137,35 +138,43 @@ export function ChatPanel() {
       setIsStreaming(true);
 
       try {
-        const res = await fetch('/api/llm/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: text,
-            context: statementContext,
-            history: messages.slice(-10).map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-            model: activeModel,
-            ollamaUrl,
-          }),
-        });
-
-        if (!res.ok) {
-          const err = await res
-            .json()
-            .catch(() => ({ error: 'Unknown error' }));
+        // Resolve model
+        let selectedModel = activeModel ?? undefined;
+        if (!selectedModel) {
+          const models = await listModels(ollamaUrl);
+          selectedModel = models[0];
+        }
+        if (!selectedModel) {
           updateMessage(
             assistantId,
-            `⚠️ ${err.error || 'Failed to get a response. Check Settings → AI Connection.'}`
+            '⚠️ No AI model available. Pull a model in Ollama first.'
           );
           return;
         }
 
-        const reader = res.body?.getReader();
-        if (!reader) throw new Error('No reader');
+        // Build messages for Ollama
+        const systemPrompt = `You are a helpful financial assistant. You have access to the user's bank statement data below. Answer questions accurately and concisely.
 
+${statementContext || 'No statement data available yet.'}
+
+Guidelines:
+- Be concise and precise with numbers.
+- Format currency amounts properly.
+- If asked for calculations, show your work briefly.
+- If the data doesn't contain enough info, say so.`;
+
+        const chatMessages = [
+          { role: 'system', content: systemPrompt },
+          ...messages.slice(-10).map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          { role: 'user', content: text },
+        ];
+
+        // Stream directly from browser → Ollama
+        const stream = await chatStream(ollamaUrl, selectedModel, chatMessages);
+        const reader = stream.getReader();
         const decoder = new TextDecoder();
         let full = '';
 
@@ -174,20 +183,17 @@ export function ChatPanel() {
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n').filter((l) => l.startsWith('data: '));
+          const lines = chunk.split('\n').filter((l) => l.trim());
 
           for (const line of lines) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-
             try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                full += parsed.content;
+              const parsed = JSON.parse(line);
+              if (parsed.message?.content) {
+                full += parsed.message.content;
                 updateMessage(assistantId, full);
               }
             } catch {
-              /* skip */
+              /* skip malformed lines */
             }
           }
         }

@@ -1,6 +1,11 @@
 import { Transaction, ParsedStatement, Currency, LLMStatus } from "@/types";
 import { v4 as uuidv4 } from "uuid";
 import { useSettingsStore } from "@/lib/store/settingsStore";
+import {
+  checkOllamaStatus,
+  generate,
+  listModels,
+} from "@/lib/llm/ollamaBrowserClient";
 
 /* ============================================================
    LLM-POWERED PARSER
@@ -124,21 +129,22 @@ export async function parseWithLLM(
     );
   }
 
-  // 2 — Send to LLM
+  // 2 — Send to LLM (directly from browser → Ollama)
   onProgress?.("AI is analysing your statement — this may take a moment...");
 
-  const res = await fetch("/api/llm/parse", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: rawText, model, ollamaUrl }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || "LLM parsing failed");
+  // Resolve model
+  let selectedModel = model ?? undefined;
+  if (!selectedModel) {
+    const models = await listModels(ollamaUrl);
+    selectedModel = models[0];
+  }
+  if (!selectedModel) {
+    throw new Error(
+      "No AI model available. Pull a model first (e.g. ollama pull llama3.2)",
+    );
   }
 
-  const result = await res.json();
+  const result = await parseLLMDirect(ollamaUrl, selectedModel, rawText);
 
   if (!result.transactions || result.transactions.length === 0) {
     throw new Error("AI could not find any transactions in the document.");
@@ -147,14 +153,16 @@ export async function parseWithLLM(
   onProgress?.(`Found ${result.transactions.length} transactions!`);
 
   // 3 — Convert to Transaction objects
-  const transactions: Transaction[] = result.transactions
+  const transactions: Transaction[] = (
+    result.transactions as {
+      date: string;
+      description: string;
+      amount: number;
+      type: string;
+    }[]
+  )
     .map(
-      (t: {
-        date: string;
-        description: string;
-        amount: number;
-        type: string;
-      }) => ({
+      (t) => ({
         id: uuidv4(),
         date: new Date(t.date),
         description: t.description,
@@ -192,16 +200,166 @@ export async function parseWithLLM(
 
 /**
  * Check whether the LLM is reachable at the configured URL.
+ * Calls Ollama directly from the browser (no server proxy).
  */
 export async function checkLLMStatus(ollamaUrl?: string): Promise<LLMStatus> {
   const url = ollamaUrl ?? useSettingsStore.getState().ollamaUrl;
-  try {
-    const res = await fetch(`/api/llm/status?url=${encodeURIComponent(url)}`);
-    if (!res.ok) return { connected: false, models: [], selectedModel: null };
-    return await res.json();
-  } catch {
-    return { connected: false, models: [], selectedModel: null };
+  return checkOllamaStatus(url);
+}
+
+/* ── Direct LLM parsing (browser → Ollama) ───────────────── */
+
+const PARSE_PROMPT = `You are an expert bank statement parser. Your job is to extract ALL financial transactions from the raw text of a bank statement.
+
+IMPORTANT RULES:
+1. Extract EVERY single transaction — do NOT skip any.
+2. Auto-detect the currency from the statement (look for symbols like ₹, $, €, £, ¥ or words like Rupee, Dollar, Euro, or ISO codes like INR, USD, EUR).
+3. Auto-detect the date format used (DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, DD-Mon-YYYY, etc.).
+4. For each transaction, extract:
+   - date: in YYYY-MM-DD format
+   - description: the payee, merchant, or narration text
+   - amount: the absolute numeric value (always positive)
+   - type: "expense" for debits/withdrawals/payments/money-out, "income" for credits/deposits/transfers-in/money-in
+5. Look for these clues to determine type:
+   - Separate "Debit" and "Credit" columns → debit = expense, credit = income
+   - Keywords: DEBIT/DR/WITHDRAWAL/PAID/SENT = expense; CREDIT/CR/DEPOSIT/RECEIVED/REFUND = income
+   - Negative amounts or amounts in parentheses = expense
+   - Column headers like "Money Out" vs "Money In"
+6. Do NOT include opening/closing balance rows, interest calculations, or summary rows — only actual transactions.
+7. Do NOT hallucinate transactions. Only extract what is actually in the text.
+8. Output ONLY valid JSON — no markdown fences, no explanation, no extra text.
+
+REQUIRED JSON FORMAT:
+{"currency":{"code":"INR","symbol":"₹","name":"Indian Rupee"},"transactions":[{"date":"2024-01-15","description":"Amazon Purchase","amount":500.00,"type":"expense"},{"date":"2024-01-20","description":"Salary Credit","amount":50000.00,"type":"income"}]}
+
+BANK STATEMENT TEXT:
+---
+`;
+
+function splitTextIntoChunks(text: string, maxChars: number): string[] {
+  if (text.length <= maxChars) return [text];
+
+  const chunks: string[] = [];
+  const lines = text.split("\n");
+  let current = "";
+
+  const headerLines = lines.slice(0, 5).join("\n");
+
+  for (const line of lines) {
+    if ((current + "\n" + line).length > maxChars && current.length > 0) {
+      chunks.push(current);
+      current = headerLines + "\n...\n" + line;
+    } else {
+      current += (current ? "\n" : "") + line;
+    }
   }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function safeParseJSON(raw: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    /* continue */
+  }
+
+  const codeBlockMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try {
+      return JSON.parse(codeBlockMatch[1].trim());
+    } catch {
+      /* continue */
+    }
+  }
+
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch {
+      /* continue */
+    }
+
+    let fixed = match[0];
+    fixed = fixed.replace(/,\s*([}\]])/g, "$1");
+    try {
+      return JSON.parse(fixed);
+    } catch {
+      /* continue */
+    }
+  }
+
+  return null;
+}
+
+async function parseLLMDirect(
+  baseUrl: string,
+  model: string,
+  text: string,
+): Promise<{
+  currency: Record<string, string> | null;
+  transactions: Record<string, unknown>[];
+}> {
+  const MAX_CHUNK_CHARS = 12000;
+  const chunks = splitTextIntoChunks(text, MAX_CHUNK_CHARS);
+
+  let allTransactions: Record<string, unknown>[] = [];
+  let currency: Record<string, string> | null = null;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const prompt =
+      PARSE_PROMPT + chunks[i] + "\n---\n\nExtract all transactions as JSON:";
+
+    let raw: string;
+    try {
+      raw = await generate(baseUrl, model, prompt, {
+        num_ctx: 16384,
+        temperature: 0.05,
+      });
+    } catch (err) {
+      console.error(`[LLM Parse] Chunk ${i + 1} failed:`, err);
+      continue;
+    }
+
+    const parsed = safeParseJSON(raw);
+    if (parsed) {
+      if (Array.isArray(parsed.transactions)) {
+        allTransactions.push(
+          ...(parsed.transactions as Record<string, unknown>[]),
+        );
+      }
+      if (parsed.currency && !currency) {
+        currency = parsed.currency as Record<string, string>;
+      }
+    }
+  }
+
+  // Deduplicate
+  const seen = new Set<string>();
+  const validTransactions = allTransactions.filter(
+    (t: Record<string, unknown>) => {
+      if (!t.date || !t.description || typeof t.amount !== "number")
+        return false;
+      if (t.type !== "income" && t.type !== "expense") return false;
+      if (t.amount === 0) return false;
+
+      const key = `${t.date}|${String(t.description).substring(0, 30)}|${Math.abs(t.amount as number)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    },
+  );
+
+  const normalizedTransactions = validTransactions.map((t) => ({
+    ...t,
+    amount:
+      t.type === "expense"
+        ? -Math.abs(t.amount as number)
+        : Math.abs(t.amount as number),
+  }));
+
+  return { currency, transactions: normalizedTransactions };
 }
 
 /**
