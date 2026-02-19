@@ -23,7 +23,7 @@
 # misc
 .DS_Store
 *.pem
-.kombai/
+.kombai/*
 
 # debug
 npm-debug.log*
