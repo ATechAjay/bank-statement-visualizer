@@ -50,7 +50,7 @@ interface SettingsStore extends Settings {
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       currency: { code: "USD", symbol: "$", name: "US Dollar" },
       dateFormat: "auto",
       theme: "light",

@@ -36,7 +36,6 @@ export async function extractTextFromPDF(file: File): Promise<string> {
     const textContent = await page.getTextContent();
 
     // Preserve spatial layout: group by Y, sort by X
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items = textContent.items
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((item: any) => item.str && item.str.trim().length > 0)
@@ -309,7 +308,7 @@ async function parseLLMDirect(
   const MAX_CHUNK_CHARS = 12000;
   const chunks = splitTextIntoChunks(text, MAX_CHUNK_CHARS);
 
-  let allTransactions: Record<string, unknown>[] = [];
+  const allTransactions: Record<string, unknown>[] = [];
   let currency: Record<string, string> | null = null;
 
   for (let i = 0; i < chunks.length; i++) {

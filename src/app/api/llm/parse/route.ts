@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       `[LLM Parse] ${chunks.length} chunk(s), model: ${selectedModel}`,
     );
 
-    let allTransactions: Record<string, unknown>[] = [];
+    const allTransactions: Record<string, unknown>[] = [];
     let currency: Record<string, string> | null = null;
 
     for (let i = 0; i < chunks.length; i++) {
