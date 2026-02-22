@@ -1,9 +1,11 @@
-import { chatStream, listModels } from '@/lib/llm/ollamaClient';
+import { chatStream, listModels, validateOllamaUrl } from '@/lib/llm/ollamaClient';
 
 export async function POST(request: Request) {
   try {
     const { message, context, history, model, ollamaUrl } = await request.json();
-    const baseUrl = (ollamaUrl as string) || 'http://localhost:11434';
+    const baseUrl = validateOllamaUrl(
+      (ollamaUrl as string) || 'http://localhost:11434',
+    );
 
     // Resolve model
     let selectedModel = model as string | undefined;

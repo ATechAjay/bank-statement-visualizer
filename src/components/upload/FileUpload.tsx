@@ -49,6 +49,12 @@ export function FileUpload({ onFileSelect, isProcessing = false }: FileUploadPro
   );
 
   const validateAndSelectFile = (file: File) => {
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+    if (file.size > MAX_FILE_SIZE) {
+      alert('File is too large. Maximum allowed size is 50 MB.');
+      return;
+    }
+
     const validExtensions = ['.csv', '.pdf', '.xls', '.xlsx'];
     const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
 

@@ -91,7 +91,12 @@ export async function extractTextFromTabular(file: File): Promise<string> {
   // XLS/XLSX — convert to CSV text
   const XLSX = await import("xlsx");
   const arrayBuffer = await file.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, { type: "array" });
+  const workbook = XLSX.read(arrayBuffer, {
+    type: "array",
+    cellFormula: false,
+    cellHTML: false,
+    cellStyles: false,
+  });
 
   let text = "";
   for (const sheetName of workbook.SheetNames) {

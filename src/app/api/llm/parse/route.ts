@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { generate, listModels } from "@/lib/llm/ollamaClient";
+import { generate, listModels, validateOllamaUrl } from "@/lib/llm/ollamaClient";
+import { debugLog, debugWarn } from "@/lib/utils";
 
 /* ============================================================
    LLM PARSE ENDPOINT
@@ -37,7 +38,9 @@ BANK STATEMENT TEXT:
 export async function POST(request: Request) {
   try {
     const { text, model, ollamaUrl } = await request.json();
-    const baseUrl = (ollamaUrl as string) || "http://localhost:11434";
+    const baseUrl = validateOllamaUrl(
+      (ollamaUrl as string) || "http://localhost:11434",
+    );
 
     if (!text || typeof text !== "string") {
       return NextResponse.json({ error: "No text provided" }, { status: 400 });
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
     // Chunk long statements — use larger chunks to avoid splitting transactions
     const MAX_CHUNK_CHARS = 12000;
     const chunks = splitTextIntoChunks(text, MAX_CHUNK_CHARS);
-    console.log(
+    debugLog(
       `[LLM Parse] ${chunks.length} chunk(s), model: ${selectedModel}`,
     );
 
@@ -70,7 +73,7 @@ export async function POST(request: Request) {
     let currency: Record<string, string> | null = null;
 
     for (let i = 0; i < chunks.length; i++) {
-      console.log(
+      debugLog(
         `[LLM Parse] Processing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`,
       );
       const prompt =
@@ -96,7 +99,7 @@ export async function POST(request: Request) {
           currency = parsed.currency as Record<string, string>;
         }
       } else {
-        console.warn(
+        debugWarn(
           `[LLM Parse] Chunk ${i + 1}: could not extract JSON from response`,
         );
       }
@@ -128,7 +131,7 @@ export async function POST(request: Request) {
           : Math.abs(t.amount as number),
     }));
 
-    console.log(
+    debugLog(
       `[LLM Parse] ${normalizedTransactions.length} valid transactions extracted`,
     );
 

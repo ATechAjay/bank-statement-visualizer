@@ -3,6 +3,7 @@ import { Transaction, ParsedStatement, Currency } from "@/types";
 import { v4 as uuidv4 } from "uuid";
 import { parseDate, excelSerialToDate } from "./dateParser";
 import { detectCurrencyFromText } from "./currencyDetector";
+import { debugLog } from "@/lib/utils";
 
 /* ============================================================
    UNIVERSAL EXCEL PARSER
@@ -19,7 +20,12 @@ export interface XLSParseResult {
 export async function parseXLS(file: File): Promise<XLSParseResult> {
   try {
     const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+    const workbook = XLSX.read(arrayBuffer, {
+      type: "array",
+      cellFormula: false,
+      cellHTML: false,
+      cellStyles: false,
+    });
 
     // Try every sheet — use the one that yields the most transactions
     let best: { transactions: Transaction[]; currency: Currency | null } = {
@@ -92,7 +98,7 @@ function parseSheet(ws: XLSX.WorkSheet): {
     if (txn) transactions.push(txn);
   }
 
-  console.log(
+  debugLog(
     `[XLS] Parsed ${transactions.length} transactions from ${rawRows.length} rows`,
   );
   return { transactions, currency };
