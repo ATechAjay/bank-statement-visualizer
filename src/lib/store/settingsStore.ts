@@ -50,7 +50,7 @@ interface SettingsStore extends Settings {
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       currency: { code: "USD", symbol: "$", name: "US Dollar" },
       dateFormat: "auto",
       theme: "light",
@@ -63,7 +63,18 @@ export const useSettingsStore = create<SettingsStore>()(
       setDateFormat: (format) => set({ dateFormat: format }),
       setTheme: (theme) => set({ theme }),
       getAvailableCurrencies: () => availableCurrencies,
-      setOllamaUrl: (url) => set({ ollamaUrl: url }),
+      setOllamaUrl: (url) => {
+        try {
+          const parsed = new URL(url);
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            return;
+          }
+          // Strip trailing slash for consistency
+          set({ ollamaUrl: url.replace(/\/+$/, "") });
+        } catch {
+          // Reject invalid URLs silently
+        }
+      },
       setLLMModel: (model) => set({ llmModel: model }),
     }),
     {

@@ -15,6 +15,24 @@ interface FileUploadProps {
 export function FileUpload({ onFileSelect, isProcessing = false }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
 
+  const validateAndSelectFile = useCallback((file: File) => {
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+    if (file.size > MAX_FILE_SIZE) {
+      alert('File is too large. Maximum allowed size is 50 MB.');
+      return;
+    }
+
+    const validExtensions = ['.csv', '.pdf', '.xls', '.xlsx'];
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+
+    if (!validExtensions.includes(fileExtension)) {
+      alert('Please upload a valid file (CSV, PDF, XLS, or XLSX)');
+      return;
+    }
+
+    onFileSelect(file);
+  }, [onFileSelect]);
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -35,7 +53,7 @@ export function FileUpload({ onFileSelect, isProcessing = false }: FileUploadPro
         validateAndSelectFile(file);
       }
     },
-    [onFileSelect]
+    [validateAndSelectFile]
   );
 
   const handleFileInput = useCallback(
@@ -45,20 +63,8 @@ export function FileUpload({ onFileSelect, isProcessing = false }: FileUploadPro
         validateAndSelectFile(file);
       }
     },
-    [onFileSelect]
+    [validateAndSelectFile]
   );
-
-  const validateAndSelectFile = (file: File) => {
-    const validExtensions = ['.csv', '.pdf', '.xls', '.xlsx'];
-    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-
-    if (!validExtensions.includes(fileExtension)) {
-      alert('Please upload a valid file (CSV, PDF, XLS, or XLSX)');
-      return;
-    }
-
-    onFileSelect(file);
-  };
 
   return (
     <Card

@@ -2,6 +2,7 @@ import { Transaction, ParsedStatement, Currency } from "@/types";
 import { v4 as uuidv4 } from "uuid";
 import { extractDateFromText } from "./dateParser";
 import { detectCurrencyFromText } from "./currencyDetector";
+import { debugLog, debugWarn } from "@/lib/utils";
 
 /* ============================================================
    UNIVERSAL PDF PARSER — Column-Position-Based
@@ -13,8 +14,6 @@ import { detectCurrencyFromText } from "./currencyDetector";
    4. Validate with running-balance cross-check
    5. Fallback: text-based heuristics + balance tracking
    ============================================================ */
-
-let lastExtractedText = "";
 
 export interface PDFParseResult {
   statement: ParsedStatement;
@@ -206,17 +205,16 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
       allLines.push(...pageLines);
     }
 
-    lastExtractedText = fullText;
     const detectedCurrency = detectCurrencyFromText(fullText);
 
     // === Strategy 1: Column-position parsing (most reliable) ===
     let transactions = columnBasedParse(allLines);
-    console.log(`[PDF] Column-based: ${transactions.length} transactions`);
+    debugLog(`[PDF] Column-based: ${transactions.length} transactions`);
 
     // === Strategy 2: Enhanced text fallback with balance tracking ===
     if (transactions.length < 3) {
       const fallbackTxns = textBasedParse(allLines);
-      console.log(`[PDF] Text-based: ${fallbackTxns.length} transactions`);
+      debugLog(`[PDF] Text-based: ${fallbackTxns.length} transactions`);
       if (fallbackTxns.length > transactions.length) {
         transactions = fallbackTxns;
       }
@@ -226,14 +224,14 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
     transactions = validateWithBalance(transactions);
 
     if (transactions.length < 3) {
-      console.warn(
+      debugWarn(
         "[PDF] Only found",
         transactions.length,
         "transactions. Consider using AI parsing.",
       );
     }
 
-    console.log(`[PDF] Final: ${transactions.length} transactions`);
+    debugLog(`[PDF] Final: ${transactions.length} transactions`);
 
     return {
       statement: {
@@ -249,10 +247,6 @@ export async function parsePDF(file: File): Promise<PDFParseResult> {
     console.error("Error parsing PDF:", error);
     throw new Error("Failed to parse PDF file");
   }
-}
-
-export function getLastExtractedText(): string {
-  return lastExtractedText;
 }
 
 /* ================================================================
@@ -289,7 +283,7 @@ function findHeaderRow(
         xEnd: c.item.x + c.item.text.length * 6,
       }));
 
-      console.log(
+      debugLog(
         `[PDF] Header at line ${i}:`,
         columns.map((c) => `${c.type}@x=${c.x}`).join(", "),
       );
@@ -626,7 +620,7 @@ function textBasedParse(lines: PdfLine[]): Transaction[] {
     }
 
     if (balanceTrackingValid) {
-      console.log("[PDF] Using balance tracking for type detection");
+      debugLog("[PDF] Using balance tracking for type detection");
       prevBalance = null;
 
       for (const entry of entries) {
@@ -677,7 +671,7 @@ function textBasedParse(lines: PdfLine[]): Transaction[] {
   }
 
   // ------- Final fallback: keyword-based type detection -------
-  console.log("[PDF] Using keyword-based type detection");
+  debugLog("[PDF] Using keyword-based type detection");
 
   for (const entry of entries) {
     const creditPatterns =
@@ -822,7 +816,7 @@ function validateWithBalance(transactions: Transaction[]): Transaction[] {
   }
 
   if (corrected > 0) {
-    console.log(
+    debugLog(
       `[PDF] Balance validation corrected ${corrected} transaction(s)`,
     );
   }

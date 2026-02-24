@@ -45,13 +45,19 @@ export default function ReviewPage() {
     // Get pending transactions from sessionStorage
     const stored = sessionStorage.getItem("pendingTransactions");
     if (stored) {
-      const parsed = JSON.parse(stored);
-      // Convert date strings back to Date objects
-      const withDates = parsed.map((t: any) => ({
-        ...t,
-        date: new Date(t.date),
-      }));
-      setPendingTransactions(withDates);
+      try {
+        const parsed = JSON.parse(stored);
+        // Convert date strings back to Date objects
+        const withDates = parsed.map((t: any) => ({
+          ...t,
+          date: new Date(t.date),
+        }));
+        setPendingTransactions(withDates);
+      } catch {
+        // Corrupted data — clear and redirect
+        sessionStorage.removeItem("pendingTransactions");
+        router.push("/");
+      }
     } else {
       // No pending transactions, redirect to home
       router.push("/");

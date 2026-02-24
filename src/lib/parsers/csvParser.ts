@@ -3,6 +3,7 @@ import { Transaction, ParsedStatement, Currency } from "@/types";
 import { v4 as uuidv4 } from "uuid";
 import { parseDate, detectDateOrder } from "./dateParser";
 import { detectCurrencyFromText } from "./currencyDetector";
+import { debugLog } from "@/lib/utils";
 
 /* ============================================================
    UNIVERSAL CSV PARSER
@@ -55,7 +56,7 @@ export async function parseCSV(file: File): Promise<CSVParseResult> {
             );
           }
 
-          console.log("[CSV] Column mapping:", mapping);
+          debugLog("[CSV] Column mapping:", mapping);
 
           // 2. Detect date order (DD/MM vs MM/DD)
           const sampleDates = rows
@@ -63,7 +64,7 @@ export async function parseCSV(file: File): Promise<CSVParseResult> {
             .map((r) => r[mapping.dateCol!])
             .filter(Boolean);
           const dateOrder = detectDateOrder(sampleDates);
-          console.log("[CSV] Detected date order:", dateOrder);
+          debugLog("[CSV] Detected date order:", dateOrder);
 
           // 3. Detect currency
           const fullText =
@@ -74,7 +75,7 @@ export async function parseCSV(file: File): Promise<CSVParseResult> {
               .map((r) => Object.values(r).join(" "))
               .join(" ");
           const detectedCurrency = detectCurrencyFromText(fullText);
-          console.log("[CSV] Detected currency:", detectedCurrency);
+          debugLog("[CSV] Detected currency:", detectedCurrency);
 
           // 4. Parse each row
           const transactions: Transaction[] = [];
@@ -83,7 +84,7 @@ export async function parseCSV(file: File): Promise<CSVParseResult> {
             if (txn) transactions.push(txn);
           }
 
-          console.log(
+          debugLog(
             `[CSV] Parsed ${transactions.length} transactions from ${rows.length} rows`,
           );
 

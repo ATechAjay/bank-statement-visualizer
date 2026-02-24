@@ -217,14 +217,14 @@ export function AIConnectionBar({ onStatusChange }: AIConnectionBarProps) {
               Open Terminal and run:
               <div className="mt-1 space-y-1">
                 <code className="block bg-muted px-2 py-1 rounded text-[11px]">ollama pull llama3.2</code>
-                <code className="block bg-muted px-2 py-1 rounded text-[11px]">OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code>
+                <code className="block bg-muted px-2 py-1 rounded text-[11px]">OLLAMA_ORIGINS=&quot;http://localhost:3000&quot; ollama serve</code>
               </div>
             </li>
             <li>Click <strong>Connect</strong> above</li>
           </ol>
           <p className="text-[11px] opacity-70">
             The <code>OLLAMA_ORIGINS</code> flag allows your browser to connect to the local AI. On Mac, run{' '}
-            <code>launchctl setenv OLLAMA_ORIGINS &quot;*&quot;</code> to make it permanent.
+            <code>launchctl setenv OLLAMA_ORIGINS &quot;http://localhost:3000&quot;</code> to make it permanent.
           </p>
         </div>
       )}
